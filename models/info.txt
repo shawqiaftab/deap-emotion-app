@@ -1,0 +1,11 @@
+Video Only -> final_model.h5
+Video Only Loso -> s_01.h5, s_02.h5, ..., s_22.h5
+EEG Only -> s_01.pt, s_02.pt, ..., s_32.pt
+EEG Only Loso -> s_01.pt, s_02.pt, ..., 
+Early Fusion -> arousal.pt, valence.pt, dominance.pt, liking.pt
+Early Fusion Loso -> s_01.pt, ..., s_32.pt
+Mid Fusion -> s_01.pt, ..., s_32.pt
+Mid Fusion Loso -> s_01.pt, ... , s_08.pt
+Late Fusion -> s_01.pth, ..., s_32.pth
+Late Fusion Loso -> s_01.pth, ... s_32.pth
+

@@ -1,8 +1,4 @@
 __pycache__/
 *.pyc
 .DS_Store
-models/
-*.h5
-*.pt
-*.pth
 
