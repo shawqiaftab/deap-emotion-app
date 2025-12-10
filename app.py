@@ -46,10 +46,30 @@ with st.expander("📖 Understanding Emotion Dimensions"):
         - High (7-9): Like, preference, enjoyment
         """)
 
-MODEL_DIR = Path("models")
+available_models = [
+    "early_fusion",
+    "early_fusion_loso", 
+    "eeg_loso",
+    "eeg_only",
+    "late_fusion",
+    "Late Fusion Loso",
+    "mid_fusion",
+    "mid_fusion_loso",
+    "video_loso",
+    "video_only"
+]
+
+st.sidebar.header("🤖 Model Selection")
+selected_model_dir = st.sidebar.selectbox(
+    "Choose Model Type",
+    available_models,
+    help="Select which trained model to use for predictions"
+)
+
+MODEL_DIR = Path("models") / selected_model_dir
+st.sidebar.success(f"Using: `{selected_model_dir}`")
 
 def generate_synthetic_eeg(channels=32, samples=8064, emotion_type='neutral'):
-    """Generate synthetic EEG data for testing"""
     duration = samples / 128
     time = np.linspace(0, duration, samples)
     eeg_data = np.zeros((channels, samples))
@@ -76,7 +96,6 @@ def generate_synthetic_eeg(channels=32, samples=8064, emotion_type='neutral'):
     return eeg_data
 
 def generate_synthetic_video_embedding(dim=768):
-    """Generate random video embedding for testing"""
     return np.random.randn(1, dim).astype(np.float32)
 
 def display_emotion_results(prediction, labels=None):
