@@ -98,6 +98,10 @@ def generate_synthetic_eeg(channels=32, samples=8064, emotion_type='neutral'):
 def generate_synthetic_video_embedding(dim=768):
     return np.random.randn(1, dim).astype(np.float32)
 
+def generate_synthetic_video_frames(num_frames=15, height=112, width=112):
+    frames = np.random.randint(0, 255, size=(num_frames, height, width, 3), dtype=np.uint8)
+    return frames.astype(np.float32) / 255.0
+
 def display_emotion_results(prediction, labels=None):
     emotions = [
         ('Valence', '😊', '😢'),
@@ -347,14 +351,28 @@ with tab3:
                     st.write("- Balanced frequency distribution")
     
     with col2:
-        st.subheader("Synthetic Video Embedding")
+        st.subheader("Synthetic Video Data")
         
-        if st.button("🎲 Generate Synthetic Video Embedding", key='gen_video'):
-            with st.spinner("Generating synthetic video embedding..."):
-                synthetic_video = generate_synthetic_video_embedding()
-                st.session_state['synthetic_video'] = synthetic_video
-                st.success(f"✅ Generated Video Embedding: {synthetic_video.shape}")
-                st.info("Random 768-dimensional feature vector simulating ResNet50 output")
+        video_format = st.radio(
+            "Video Format",
+            ["Embedding (768-dim)", "Raw Frames (15, 112, 112, 3)"],
+            help="Select based on your model's expected input"
+        )
+        
+        if st.button("🎲 Generate Synthetic Video", key='gen_video'):
+            with st.spinner("Generating synthetic video data..."):
+                if "Embedding" in video_format:
+                    synthetic_video = generate_synthetic_video_embedding()
+                    st.session_state['synthetic_video'] = synthetic_video
+                    st.session_state['video_format'] = 'embedding'
+                    st.success(f"✅ Generated Video Embedding: {synthetic_video.shape}")
+                    st.info("Random 768-dimensional feature vector")
+                else:
+                    synthetic_video = generate_synthetic_video_frames()
+                    st.session_state['synthetic_video'] = synthetic_video
+                    st.session_state['video_format'] = 'frames'
+                    st.success(f"✅ Generated Video Frames: {synthetic_video.shape}")
+                    st.info("15 frames of 112x112 RGB video")
     
     model_name_lower = selected_model_dir.lower()
     needs_eeg = 'eeg' in model_name_lower or 'fusion' in model_name_lower
@@ -362,8 +380,6 @@ with tab3:
     
     has_eeg = 'synthetic_eeg' in st.session_state
     has_video = 'synthetic_video' in st.session_state
-    
-    can_predict = (needs_eeg == has_eeg or not needs_eeg) and (needs_video == has_video or not needs_video)
     
     if has_eeg and has_video:
         st.divider()
@@ -375,6 +391,7 @@ with tab3:
         if st.button("🚀 Predict Emotion from Synthetic Data", key='predict_synthetic'):
             synthetic_eeg = st.session_state['synthetic_eeg']
             synthetic_video = st.session_state['synthetic_video']
+            video_fmt = st.session_state.get('video_format', 'embedding')
             extensions = [".h5"] if "Keras" in model_type else [".pt", ".pth"]
             
             with st.spinner("Loading models..."):
@@ -392,26 +409,38 @@ with tab3:
                         try:
                             if "Keras" in model_type:
                                 if needs_eeg and needs_video:
-                                    combined_input = np.concatenate([
-                                        synthetic_eeg.flatten(),
-                                        synthetic_video.flatten()
-                                    ]).reshape(1, -1)
+                                    if video_fmt == 'frames':
+                                        combined_input = synthetic_video.reshape(1, 15, 112, 112, 3)
+                                    else:
+                                        combined_input = np.concatenate([
+                                            synthetic_eeg.flatten(),
+                                            synthetic_video.flatten()
+                                        ]).reshape(1, -1)
                                 elif needs_eeg:
                                     combined_input = synthetic_eeg.reshape(1, -1)
                                 else:
-                                    combined_input = synthetic_video.reshape(1, -1)
+                                    if video_fmt == 'frames':
+                                        combined_input = synthetic_video.reshape(1, 15, 112, 112, 3)
+                                    else:
+                                        combined_input = synthetic_video.reshape(1, -1)
                                 
                                 pred = model.predict(combined_input, verbose=0)
                             else:
                                 if needs_eeg and needs_video:
-                                    combined_input = torch.cat([
-                                        torch.FloatTensor(synthetic_eeg).flatten(),
-                                        torch.FloatTensor(synthetic_video).flatten()
-                                    ]).unsqueeze(0)
+                                    if video_fmt == 'frames':
+                                        combined_input = torch.FloatTensor(synthetic_video).unsqueeze(0)
+                                    else:
+                                        combined_input = torch.cat([
+                                            torch.FloatTensor(synthetic_eeg).flatten(),
+                                            torch.FloatTensor(synthetic_video).flatten()
+                                        ]).unsqueeze(0)
                                 elif needs_eeg:
                                     combined_input = torch.FloatTensor(synthetic_eeg).flatten().unsqueeze(0)
                                 else:
-                                    combined_input = torch.FloatTensor(synthetic_video).flatten().unsqueeze(0)
+                                    if video_fmt == 'frames':
+                                        combined_input = torch.FloatTensor(synthetic_video).unsqueeze(0)
+                                    else:
+                                        combined_input = torch.FloatTensor(synthetic_video).flatten().unsqueeze(0)
                                 
                                 with torch.no_grad():
                                     pred = model(combined_input).numpy()
@@ -426,7 +455,7 @@ with tab3:
                         display_emotion_results(avg_prediction)
                         
                         st.divider()
-                        st.info(f"💡 **Model**: {selected_model_dir} | **Preset**: {emotion_preset.title()}")
+                        st.info(f"💡 **Model**: {selected_model_dir} | **Preset**: {emotion_preset.title()} | **Video**: {video_fmt}")
                     else:
                         st.error("No successful predictions")
     
