@@ -186,26 +186,46 @@ with tab1:
                     st.subheader("🎯 Emotion Prediction Results")
                     predictions = {}
                     
+                    model_name_lower = selected_model_dir.lower()
+                    use_eeg = 'eeg' in model_name_lower or 'fusion' in model_name_lower
+                    use_video = 'video' in model_name_lower or 'fusion' in model_name_lower
+                    
                     for fold_name, model in models.items():
-                        if "Keras" in model_type:
-                            combined_input = np.concatenate([
-                                eeg_data.flatten(),
-                                video_embedding.flatten()
-                            ]).reshape(1, -1)
-                            pred = model.predict(combined_input, verbose=0)
-                        else:
-                            combined_input = torch.cat([
-                                torch.FloatTensor(eeg_data).flatten(),
-                                torch.FloatTensor(video_embedding).flatten()
-                            ]).unsqueeze(0)
-                            with torch.no_grad():
-                                pred = model(combined_input).numpy()
-                        
-                        predictions[fold_name] = pred[0]
+                        try:
+                            if "Keras" in model_type:
+                                if use_eeg and use_video:
+                                    combined_input = np.concatenate([
+                                        eeg_data.flatten(),
+                                        video_embedding.flatten()
+                                    ]).reshape(1, -1)
+                                elif use_eeg:
+                                    combined_input = eeg_data.reshape(1, -1)
+                                else:
+                                    combined_input = video_embedding.reshape(1, -1)
+                                
+                                pred = model.predict(combined_input, verbose=0)
+                            else:
+                                if use_eeg and use_video:
+                                    combined_input = torch.cat([
+                                        torch.FloatTensor(eeg_data).flatten(),
+                                        torch.FloatTensor(video_embedding).flatten()
+                                    ]).unsqueeze(0)
+                                elif use_eeg:
+                                    combined_input = torch.FloatTensor(eeg_data).flatten().unsqueeze(0)
+                                else:
+                                    combined_input = torch.FloatTensor(video_embedding).flatten().unsqueeze(0)
+                                
+                                with torch.no_grad():
+                                    pred = model(combined_input).numpy()
+                            
+                            predictions[fold_name] = pred[0]
+                        except Exception as e:
+                            st.error(f"Error with {fold_name}: {str(e)}")
+                            continue
                     
-                    avg_prediction = np.mean(list(predictions.values()), axis=0)
-                    
-                    display_emotion_results(avg_prediction)
+                    if predictions:
+                        avg_prediction = np.mean(list(predictions.values()), axis=0)
+                        display_emotion_results(avg_prediction)
 
 with tab2:
     st.header("Fused Dataset Upload")
@@ -336,7 +356,16 @@ with tab3:
                 st.success(f"✅ Generated Video Embedding: {synthetic_video.shape}")
                 st.info("Random 768-dimensional feature vector simulating ResNet50 output")
     
-    if 'synthetic_eeg' in st.session_state and 'synthetic_video' in st.session_state:
+    model_name_lower = selected_model_dir.lower()
+    needs_eeg = 'eeg' in model_name_lower or 'fusion' in model_name_lower
+    needs_video = 'video' in model_name_lower or 'fusion' in model_name_lower
+    
+    has_eeg = 'synthetic_eeg' in st.session_state
+    has_video = 'synthetic_video' in st.session_state
+    
+    can_predict = (needs_eeg == has_eeg or not needs_eeg) and (needs_video == has_video or not needs_video)
+    
+    if has_eeg and has_video:
         st.divider()
         
         st.subheader("🔬 Run Prediction on Synthetic Data")
@@ -360,31 +389,54 @@ with tab3:
                     predictions = {}
                     
                     for fold_name, model in models.items():
-                        if "Keras" in model_type:
-                            combined_input = np.concatenate([
-                                synthetic_eeg.flatten(),
-                                synthetic_video.flatten()
-                            ]).reshape(1, -1)
-                            pred = model.predict(combined_input, verbose=0)
-                        else:
-                            combined_input = torch.cat([
-                                torch.FloatTensor(synthetic_eeg).flatten(),
-                                torch.FloatTensor(synthetic_video).flatten()
-                            ]).unsqueeze(0)
-                            with torch.no_grad():
-                                pred = model(combined_input).numpy()
+                        try:
+                            if "Keras" in model_type:
+                                if needs_eeg and needs_video:
+                                    combined_input = np.concatenate([
+                                        synthetic_eeg.flatten(),
+                                        synthetic_video.flatten()
+                                    ]).reshape(1, -1)
+                                elif needs_eeg:
+                                    combined_input = synthetic_eeg.reshape(1, -1)
+                                else:
+                                    combined_input = synthetic_video.reshape(1, -1)
+                                
+                                pred = model.predict(combined_input, verbose=0)
+                            else:
+                                if needs_eeg and needs_video:
+                                    combined_input = torch.cat([
+                                        torch.FloatTensor(synthetic_eeg).flatten(),
+                                        torch.FloatTensor(synthetic_video).flatten()
+                                    ]).unsqueeze(0)
+                                elif needs_eeg:
+                                    combined_input = torch.FloatTensor(synthetic_eeg).flatten().unsqueeze(0)
+                                else:
+                                    combined_input = torch.FloatTensor(synthetic_video).flatten().unsqueeze(0)
+                                
+                                with torch.no_grad():
+                                    pred = model(combined_input).numpy()
+                            
+                            predictions[fold_name] = pred[0]
+                        except Exception as e:
+                            st.error(f"Error with {fold_name}: {str(e)}")
+                            continue
+                    
+                    if predictions:
+                        avg_prediction = np.mean(list(predictions.values()), axis=0)
+                        display_emotion_results(avg_prediction)
                         
-                        predictions[fold_name] = pred[0]
-                    
-                    avg_prediction = np.mean(list(predictions.values()), axis=0)
-                    
-                    display_emotion_results(avg_prediction)
-                    
-                    st.divider()
-                    st.info(f"💡 **Preset used**: {emotion_preset.title()} - Results may vary based on model training")
+                        st.divider()
+                        st.info(f"💡 **Model**: {selected_model_dir} | **Preset**: {emotion_preset.title()}")
+                    else:
+                        st.error("No successful predictions")
     
-    elif 'synthetic_eeg' in st.session_state or 'synthetic_video' in st.session_state:
-        st.warning("⚠️ Generate both EEG and Video data to run predictions")
+    elif has_eeg or has_video:
+        if needs_eeg and not has_eeg:
+            st.warning("⚠️ Generate EEG data for this model")
+        elif needs_video and not has_video:
+            st.warning("⚠️ Generate Video data for this model")
+        elif needs_eeg and needs_video:
+            st.warning("⚠️ Generate both EEG and Video data for this fusion model")
 
 st.sidebar.header("ℹ️ System Information")
 st.sidebar.markdown("""
