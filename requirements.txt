@@ -4,6 +4,6 @@ torchvision
 tensorflow
 numpy
 pandas
-opencv-python
+opencv-python-headless
 scikit-learn
 
