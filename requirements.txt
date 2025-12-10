@@ -6,4 +6,5 @@ numpy
 pandas
 opencv-python-headless
 scikit-learn
+h5py
 
