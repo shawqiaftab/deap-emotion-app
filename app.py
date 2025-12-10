@@ -170,15 +170,16 @@ with tab1:
     if eeg_file and video_file:
         st.divider()
         
-        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"], key='model_tab1')
-        extension = ".h5" if "Keras" in model_type else ".pt"
+        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt/.pth)"], key='model_tab1')
         
         if st.button("🚀 Run Prediction", key='predict_individual'):
+            extensions = [".h5"] if "Keras" in model_type else [".pt", ".pth"]
+            
             with st.spinner("Loading models..."):
-                models = load_all_fold_models(MODEL_DIR, extension)
+                models = load_all_fold_models(MODEL_DIR, extensions)
                 
                 if not models:
-                    st.error(f"No models found in {MODEL_DIR} with extension {extension}")
+                    st.error(f"No models found in {MODEL_DIR} with extensions {extensions}")
                 else:
                     st.success(f"Loaded {len(models)} models")
                     
@@ -186,7 +187,7 @@ with tab1:
                     predictions = {}
                     
                     for fold_name, model in models.items():
-                        if extension == '.h5':
+                        if "Keras" in model_type:
                             combined_input = np.concatenate([
                                 eeg_data.flatten(),
                                 video_embedding.flatten()
@@ -249,14 +250,14 @@ with tab2:
         if 'fused_data' in st.session_state:
             st.divider()
             
-            model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"], key='model_fused')
-            extension = ".h5" if "Keras" in model_type else ".pt"
+            model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt/.pth)"], key='model_fused')
             
             if st.button("🚀 Run Prediction on Fused Data", key='predict_fused'):
                 data = st.session_state['fused_data']
+                extensions = [".h5"] if "Keras" in model_type else [".pt", ".pth"]
                 
                 with st.spinner("Loading models..."):
-                    models = load_all_fold_models(MODEL_DIR, extension)
+                    models = load_all_fold_models(MODEL_DIR, extensions)
                     
                     if not models:
                         st.error(f"No models found in {MODEL_DIR}")
@@ -267,7 +268,7 @@ with tab2:
                         predictions = {}
                         
                         for fold_name, model in models.items():
-                            if extension == '.h5':
+                            if "Keras" in model_type:
                                 combined_input = np.concatenate([
                                     data['eeg'].flatten(),
                                     data['peripheral'].flatten(),
@@ -340,18 +341,18 @@ with tab3:
         
         st.subheader("🔬 Run Prediction on Synthetic Data")
         
-        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"], key='model_synthetic')
-        extension = ".h5" if "Keras" in model_type else ".pt"
+        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt/.pth)"], key='model_synthetic')
         
         if st.button("🚀 Predict Emotion from Synthetic Data", key='predict_synthetic'):
             synthetic_eeg = st.session_state['synthetic_eeg']
             synthetic_video = st.session_state['synthetic_video']
+            extensions = [".h5"] if "Keras" in model_type else [".pt", ".pth"]
             
             with st.spinner("Loading models..."):
-                models = load_all_fold_models(MODEL_DIR, extension)
+                models = load_all_fold_models(MODEL_DIR, extensions)
                 
                 if not models:
-                    st.error(f"No models found in {MODEL_DIR} with extension {extension}")
+                    st.error(f"No models found in {MODEL_DIR} with extensions {extensions}")
                 else:
                     st.success(f"Loaded {len(models)} models")
                     
@@ -359,7 +360,7 @@ with tab3:
                     predictions = {}
                     
                     for fold_name, model in models.items():
-                        if extension == '.h5':
+                        if "Keras" in model_type:
                             combined_input = np.concatenate([
                                 synthetic_eeg.flatten(),
                                 synthetic_video.flatten()
