@@ -1,71 +1,68 @@
 import numpy as np
-import pandas as pd
-import pickle
+import cv2
 import h5py
 import streamlit as st
+from keras.applications import ResNet50
+from keras.applications.resnet50 import preprocess_input
 
-def load_eeg_data(uploaded_file):
-    file_extension = uploaded_file.name.split('.')[-1]
-    
-    if file_extension == 'npy':
-        data = np.load(uploaded_file)
-    elif file_extension == 'csv':
-        data = pd.read_csv(uploaded_file).values
-    elif file_extension == 'pkl':
-        data = pickle.load(uploaded_file)
-    else:
-        raise ValueError(f"Unsupported file format: {file_extension}")
-    
-    if len(data.shape) == 2 and data.shape[0] == 32:
-        data = np.expand_dims(data, axis=0)
-    
+def load_eeg_data(eeg_file):
+    data = np.load(eeg_file)
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
     return data
 
-def load_video_data(uploaded_file):
-    file_extension = uploaded_file.name.split('.')[-1]
+def load_video_data(video_file, num_frames=20, target_size=(224, 224)):
+    temp_path = f"/tmp/{video_file.name}"
+    with open(temp_path, 'wb') as f:
+        f.write(video_file.read())
     
-    if file_extension == 'npy':
-        data = np.load(uploaded_file)
-    elif file_extension == 'pkl':
-        data = pickle.load(uploaded_file)
-    else:
-        raise ValueError(f"Unsupported file format: {file_extension}")
+    cap = cv2.VideoCapture(temp_path)
+    frames = []
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
     
-    if len(data.shape) == 1:
-        data = np.expand_dims(data, axis=0)
+    for idx in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.resize(frame, target_size)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame)
     
-    return data
+    cap.release()
+    return np.array(frames)
 
-def load_fused_data(uploaded_file):
-    with h5py.File(uploaded_file, 'r') as f:
-        subject = list(f.keys())[0]
-        trial = list(f[subject].keys())[0]
-        
-        eeg = f[f'{subject}/{trial}/raw_eeg'][:]
-        video = f[f'{subject}/{trial}/video_embedding'][:]
-        labels = f[f'{subject}/{trial}/labels'][:]
-        
-        eeg = np.expand_dims(eeg, axis=0)
-        video = np.expand_dims(video, axis=0)
-    
-    return eeg, video, labels
+@st.cache_resource
+def get_resnet_model():
+    return ResNet50(weights='imagenet', include_top=False, pooling='avg')
 
-def validate_eeg_shape(data):
-    expected_channels = 32
-    expected_samples = 8064
-    
-    if data.shape[1] == expected_channels and data.shape[2] == expected_samples:
-        return data
-    else:
-        st.warning(f"Expected EEG shape: (batch, 32, 8064), got: {data.shape}")
-        return data
+def extract_video_embeddings(video_frames):
+    model = get_resnet_model()
+    preprocessed = preprocess_input(video_frames.astype(np.float32))
+    embeddings = model.predict(preprocessed, verbose=0)
+    return embeddings.mean(axis=0, keepdims=True)
 
-def validate_video_shape(data):
-    expected_embedding_dim = 768
+def load_fused_data(h5_file, subject, trial):
+    temp_path = f"/tmp/{h5_file.name}"
+    with open(temp_path, 'wb') as f:
+        f.write(h5_file.read())
     
-    if len(data.shape) == 2 and data.shape[1] == expected_embedding_dim:
-        return data
-    else:
-        st.warning(f"Expected video embedding shape: (batch, 768), got: {data.shape}")
-        return data
+    with h5py.File(temp_path, 'r') as f:
+        path = f"s{subject:02d}/trial_{trial:02d}"
+        return {
+            'eeg': f[f"{path}/raw_eeg"][:],
+            'peripheral': f[f"{path}/raw_peripheral"][:],
+            'video_embedding': f[f"{path}/video_embedding"][:],
+            'labels': f[f"{path}/labels"][:]
+        }
+
+def validate_eeg_shape(eeg_data, expected_shape=(32, 8064)):
+    if eeg_data.shape != expected_shape:
+        raise ValueError(f"Expected EEG shape {expected_shape}, got {eeg_data.shape}")
+    return True
+
+def validate_video_embedding_shape(video_emb, expected_shape=(768,)):
+    if video_emb.shape[-1] != expected_shape[0]:
+        raise ValueError(f"Expected video embedding dim {expected_shape[0]}, got {video_emb.shape}")
+    return True
 
