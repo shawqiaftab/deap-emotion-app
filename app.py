@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import json
-from model_loader import load_pytorch_model, load_keras_model
+from utils.model_loader import load_pytorch_model, load_keras_model
 
 st.set_page_config(page_title="DEAP Emotion Detection", layout="wide")
 
