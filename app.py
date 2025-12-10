@@ -48,7 +48,36 @@ with st.expander("📖 Understanding Emotion Dimensions"):
 
 MODEL_DIR = Path("models")
 
-tab1, tab2 = st.tabs(["📁 Upload Individual Files", "📊 Upload Fused Dataset"])
+def generate_synthetic_eeg(channels=32, samples=8064, emotion_type='neutral'):
+    """Generate synthetic EEG data for testing"""
+    duration = samples / 128
+    time = np.linspace(0, duration, samples)
+    eeg_data = np.zeros((channels, samples))
+    
+    for ch in range(channels):
+        delta = 2.0 * np.sin(2 * np.pi * np.random.uniform(0.5, 4) * time)
+        theta = 1.5 * np.sin(2 * np.pi * np.random.uniform(4, 8) * time)
+        alpha = 3.0 * np.sin(2 * np.pi * np.random.uniform(8, 13) * time)
+        beta = 1.0 * np.sin(2 * np.pi * np.random.uniform(13, 30) * time)
+        gamma = 0.5 * np.sin(2 * np.pi * np.random.uniform(30, 50) * time)
+        
+        eeg_data[ch] = delta + theta + alpha + beta + gamma
+        eeg_data[ch] += np.random.normal(0, 0.5, samples)
+    
+    if emotion_type == 'happy':
+        eeg_data[8:13] *= 1.5
+    elif emotion_type == 'angry':
+        eeg_data[13:] *= 2.0
+    elif emotion_type == 'sad':
+        eeg_data[:4] *= 2.0
+    elif emotion_type == 'calm':
+        eeg_data[8:13] *= 2.0
+    
+    return eeg_data
+
+def generate_synthetic_video_embedding(dim=768):
+    """Generate random video embedding for testing"""
+    return np.random.randn(1, dim).astype(np.float32)
 
 def display_emotion_results(prediction, labels=None):
     emotions = [
@@ -83,6 +112,8 @@ def display_emotion_results(prediction, labels=None):
                 color = "🟢"
             
             st.markdown(f"{color} **{level}**")
+
+tab1, tab2, tab3 = st.tabs(["📁 Upload Individual Files", "📊 Upload Fused Dataset", "🧪 Test with Synthetic Data"])
 
 with tab1:
     st.header("Individual File Upload")
@@ -120,7 +151,7 @@ with tab1:
     if eeg_file and video_file:
         st.divider()
         
-        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"])
+        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"], key='model_tab1')
         extension = ".h5" if "Keras" in model_type else ".pt"
         
         if st.button("🚀 Run Prediction", key='predict_individual'):
@@ -239,6 +270,102 @@ with tab2:
                         
                         display_emotion_results(avg_prediction, labels=data['labels'])
 
+with tab3:
+    st.header("🧪 Test with Synthetic Data")
+    st.info("Generate random synthetic EEG and video data to test your models without uploading files")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Synthetic EEG Configuration")
+        emotion_preset = st.selectbox(
+            "Select Emotion Preset",
+            ["neutral", "happy", "angry", "sad", "calm"],
+            help="Different presets adjust EEG frequency bands"
+        )
+        
+        if st.button("🎲 Generate Synthetic EEG", key='gen_eeg'):
+            with st.spinner("Generating synthetic EEG data..."):
+                synthetic_eeg = generate_synthetic_eeg(emotion_type=emotion_preset)
+                st.session_state['synthetic_eeg'] = synthetic_eeg
+                st.success(f"✅ Generated EEG: {synthetic_eeg.shape}")
+                
+                st.markdown("**Frequency Band Characteristics:**")
+                if emotion_preset == 'happy':
+                    st.write("- Enhanced Alpha (8-13 Hz) in frontal regions")
+                    st.write("- Associated with positive valence, moderate arousal")
+                elif emotion_preset == 'angry':
+                    st.write("- Enhanced Beta/Gamma (13-50 Hz)")
+                    st.write("- Associated with high arousal, negative valence")
+                elif emotion_preset == 'sad':
+                    st.write("- Enhanced Delta (0.5-4 Hz)")
+                    st.write("- Associated with low arousal, negative valence")
+                elif emotion_preset == 'calm':
+                    st.write("- Enhanced Alpha (8-13 Hz)")
+                    st.write("- Associated with positive valence, low arousal")
+                else:
+                    st.write("- Balanced frequency distribution")
+    
+    with col2:
+        st.subheader("Synthetic Video Embedding")
+        
+        if st.button("🎲 Generate Synthetic Video Embedding", key='gen_video'):
+            with st.spinner("Generating synthetic video embedding..."):
+                synthetic_video = generate_synthetic_video_embedding()
+                st.session_state['synthetic_video'] = synthetic_video
+                st.success(f"✅ Generated Video Embedding: {synthetic_video.shape}")
+                st.info("Random 768-dimensional feature vector simulating ResNet50 output")
+    
+    if 'synthetic_eeg' in st.session_state and 'synthetic_video' in st.session_state:
+        st.divider()
+        
+        st.subheader("🔬 Run Prediction on Synthetic Data")
+        
+        model_type = st.selectbox("Select Model Type", ["Keras (.h5)", "PyTorch (.pt)"], key='model_synthetic')
+        extension = ".h5" if "Keras" in model_type else ".pt"
+        
+        if st.button("🚀 Predict Emotion from Synthetic Data", key='predict_synthetic'):
+            synthetic_eeg = st.session_state['synthetic_eeg']
+            synthetic_video = st.session_state['synthetic_video']
+            
+            with st.spinner("Loading models..."):
+                models = load_all_fold_models(MODEL_DIR, extension)
+                
+                if not models:
+                    st.error(f"No models found in {MODEL_DIR} with extension {extension}")
+                else:
+                    st.success(f"Loaded {len(models)} models")
+                    
+                    st.subheader("🎯 Emotion Prediction Results")
+                    predictions = {}
+                    
+                    for fold_name, model in models.items():
+                        if extension == '.h5':
+                            combined_input = np.concatenate([
+                                synthetic_eeg.flatten(),
+                                synthetic_video.flatten()
+                            ]).reshape(1, -1)
+                            pred = model.predict(combined_input, verbose=0)
+                        else:
+                            combined_input = torch.cat([
+                                torch.FloatTensor(synthetic_eeg).flatten(),
+                                torch.FloatTensor(synthetic_video).flatten()
+                            ]).unsqueeze(0)
+                            with torch.no_grad():
+                                pred = model(combined_input).numpy()
+                        
+                        predictions[fold_name] = pred[0]
+                    
+                    avg_prediction = np.mean(list(predictions.values()), axis=0)
+                    
+                    display_emotion_results(avg_prediction)
+                    
+                    st.divider()
+                    st.info(f"💡 **Preset used**: {emotion_preset.title()} - Results may vary based on model training")
+    
+    elif 'synthetic_eeg' in st.session_state or 'synthetic_video' in st.session_state:
+        st.warning("⚠️ Generate both EEG and Video data to run predictions")
+
 st.sidebar.header("ℹ️ System Information")
 st.sidebar.markdown("""
 ### Supported Input Formats
@@ -260,6 +387,9 @@ st.sidebar.markdown("""
 
 ### DEAP Scale (1-9)
 All emotion dimensions are rated on a scale from 1 (low) to 9 (high), following the Self-Assessment Manikin (SAM) rating convention.
+
+### Testing
+Use the **Synthetic Data** tab to test your models without uploading real data.
 """)
 
 st.sidebar.markdown("---")
